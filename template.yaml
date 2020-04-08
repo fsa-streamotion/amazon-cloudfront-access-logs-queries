@@ -95,6 +95,7 @@ Resources:
                   Action:
                     - s3:GetObject
                     - s3:DeleteObject
+                    - s3:PutBucketNotification
                   Resource: !Sub "arn:aws:s3:::${SourceS3Bucket}/${SourceS3Prefix}/*"
                 - Effect: Allow
                   Action:
@@ -104,3 +105,12 @@ Resources:
                 Variables:
                     TARGET_KEY_PREFIX: !Ref TargetS3Prefix
                     SHOULD_DELETE: !Ref DeleteOriginalLogs
+                    
+
+Outputs:
+  CreatePartFnOutput: 
+    Description: 'ARN of CreatePartFn function'
+    Value: !GetAtt CreatePartFn.Arn
+  MoveNewAccessLogsFnOutput: 
+    Description: 'ARN of MoveNewAccessLogsFn function'
+    Value: !GetAtt MoveNewAccessLogsFn.Arn  
