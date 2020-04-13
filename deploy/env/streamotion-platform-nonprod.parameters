@@ -1,0 +1,9 @@
+SourceS3Bucket=s3-platform-nonprod-foxsports-s3logs
+SourceS3Prefix=alb-access-logs
+TargetS3Bucket=s3-platform-nonprod-foxsports-s3logs  
+TargetS3Prefix=alb-logs-partitioned-gz 
+AthenaDatabase=temp  
+AthenaTableName=alb_logs_rptn  
+AthenaQueryResultBucket=streammotion-platform-nonprod-athena  
+AthenaQueryResultPrefix=query-logs-repartition  
+DeleteOriginalLogs=False

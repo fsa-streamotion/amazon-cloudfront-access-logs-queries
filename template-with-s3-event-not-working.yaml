@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+    Stack that deploys a bucket which you can use as a target for your
+    Amazon ALB access logs. An event
+    notification is configured so that new objects created will fire an
+    AWS Lambda function that moves the objects to prefixes (under
+    'partitioned-gz/') that adhere to the Apache Hive partitioning format.
+    This way the data is easier to consume for big data tools (as Amazon
+    Athena and AWS Glue).
+
+Parameters:
+  SourceS3Bucket:
+    Type: String
+    Description: The S3 bucket in which ALB writes its logs.
+  SourceS3Prefix:
+    Type: String
+    Description: The S3 directory prefix in which ALB writes its logs.
+  TargetS3Bucket:
+    Type: String
+    Description: The S3 bucket to which the logs should be moved to.
+  TargetS3Prefix:
+    Type: String
+    Description: S3 Directory prefix in which the logs will be moved to.
+  AthenaDatabase:
+    Type: String
+    Description: The athena database name in which athena table resides.
+  AthenaTableName:
+    Type: String
+    Description: The athena table name that is used to access the ALB logs.
+  AthenaQueryResultBucket:
+    Type: String
+    Description: S3 Bucket where athena will write the query results to.
+  AthenaQueryResultPrefix:
+    Type: String
+    Description: S3 prefix for athena query results.
+  DeleteOriginalLogs:
+    Type: String
+    Default: false
+    Description: Should the original logs in source S3 location be deleted after copying.
+
+Resources:
+    CreatePartFn:
+        Type: AWS::Serverless::Function
+        Properties:
+            CodeUri: functions/
+            Handler: createPartitions.handler
+            Runtime: nodejs12.x
+            Timeout: 5
+            Policies:
+            - Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - athena:StartQueryExecution
+                    - athena:GetQueryExecution
+                  Resource: '*'
+                - Effect: Allow
+                  Action:
+                    - s3:ListBucket
+                    - s3:GetBucketLocation
+                  Resource: !Sub "arn:aws:s3:::${AthenaQueryResultBucket}"
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject
+                  Resource: !Sub "arn:aws:s3:::${AthenaQueryResultBucket}/${AthenaQueryResultPrefix}/*"
+                - Effect: Allow
+                  Action:
+                    - glue:CreatePartition
+                    - glue:GetDatabase
+                    - glue:GetTable
+                    - glue:BatchCreatePartition
+                  Resource: '*'
+            Environment:
+                Variables:
+                    TABLE: !Ref AthenaTableName
+                    DATABASE: !Ref AthenaDatabase
+                    ATHENA_QUERY_RESULTS_LOCATION: !Sub "s3://${AthenaQueryResultBucket}/${AthenaQueryResultPrefix}"
+            Events:
+              HourlyEvt:
+                Type: Schedule
+                Properties:
+                  Schedule: cron(55 * * * ? *)
+    MoveNewAccessLogsFn:
+        Type: AWS::Serverless::Function
+        Properties:
+            CodeUri: functions/
+            Handler: moveAccessLogs.handler
+            Runtime: nodejs12.x
+            Timeout: 30
+            Policies:
+            - Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:DeleteObject
+                    - s3:PutBucketNotification
+                  Resource: !Sub "arn:aws:s3:::${SourceS3Bucket}/${SourceS3Prefix}/*"
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject
+                  Resource: !Sub "arn:aws:s3:::${TargetS3Bucket}/${TargetS3Prefix}/*"
+            Environment:
+                Variables:
+                    TARGET_KEY_PREFIX: !Ref TargetS3Prefix
+                    SHOULD_DELETE: !Ref DeleteOriginalLogs
+            Events:
+                AccessLogsUploadedEvent:
+                    Type: S3
+                    Properties:
+                        Bucket: !Ref SourceS3Bucket 
+                        Events: s3:ObjectCreated:*
+                        Filter:
+                            S3Key:
+                                Rules:
+                                - Name: prefix
+                                  Value: !Ref SourceS3Prefix                    
+
+Outputs:
+  CreatePartFnOutput: 
+    Description: 'ARN of CreatePartFn function'
+    Value: !GetAtt CreatePartFn.Arn
+  MoveNewAccessLogsFnOutput: 
+    Description: 'ARN of MoveNewAccessLogsFn function'
+    Value: !GetAtt MoveNewAccessLogsFn.Arn  
