@@ -1,0 +1,7 @@
+- archive cloudwatch logs. set 1 day/ week.
+
+- move lambda-invoke, s3-event-trigger cli commands inside cfn/sam template 
+
+- put deployment script with 'action' 
+
+

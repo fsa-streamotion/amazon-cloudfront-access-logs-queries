@@ -105,7 +105,17 @@ Resources:
                 Variables:
                     TARGET_KEY_PREFIX: !Ref TargetS3Prefix
                     SHOULD_DELETE: !Ref DeleteOriginalLogs
-                    
+            Events:
+                AccessLogsUploadedEvent:
+                    Type: S3
+                    Properties:
+                        Bucket: !Ref SourceS3Bucket 
+                        Events: s3:ObjectCreated:*
+                        Filter:
+                            S3Key:
+                                Rules:
+                                - Name: prefix
+                                  Value: !Ref SourceS3Prefix                    
 
 Outputs:
   CreatePartFnOutput: 
